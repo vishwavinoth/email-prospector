@@ -179,8 +179,8 @@ async function handleBatch(req, res) {
   }
 }
 
-function createServer() {
-  return http.createServer(async (req, res) => {
+function createRequestHandler() {
+  return async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
     if (req.method === 'GET' && url.pathname === '/health') {
@@ -210,7 +210,11 @@ function createServer() {
     }
 
     return sendJson(res, 404, { ok: false, error: 'Not found' });
-  });
+  };
+}
+
+function createServer() {
+  return http.createServer(createRequestHandler());
 }
 
 function startServer(port = PORT, host = HOST) {
@@ -234,6 +238,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  createRequestHandler,
   createServer,
   startServer,
 };
