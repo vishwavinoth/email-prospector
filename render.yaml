@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: email-prospector
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: WEBHOOK_API_KEY
+        sync: false
+      - key: HUNTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: WEBHOOK_BATCH_CONCURRENCY
+        value: "2"
+      - key: CONCURRENCY
+        value: "2"
+      - key: SCRAPE_DELAY_MS
+        value: "2000"

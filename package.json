@@ -1,0 +1,16 @@
+{
+  "name": "email-prospector",
+  "version": "1.0.0",
+  "description": "Minimal webhook API for n8n-driven email prospecting",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "server": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.3.1",
+    "p-limit": "^3.1.0"
+  }
+}

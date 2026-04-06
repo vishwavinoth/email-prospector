@@ -1,0 +1,410 @@
+{
+  "name": "Email Prospector - Final Google Sheets Workflow",
+  "nodes": [
+    {
+      "id": "8f611572-c0d3-4b64-a1fb-143d31bf3562",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1240,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "5b1d70b2-b2fc-48bd-a430-9d8b88b98475",
+      "name": "Workflow Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -980,
+        200
+      ],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f5e36f0e-7db5-4b53-9f2b-b1f2a2eeb35e",
+              "name": "inputSpreadsheetId",
+              "type": "string",
+              "value": "YOUR_INPUT_SPREADSHEET_ID"
+            },
+            {
+              "id": "a6f4af35-0b9b-43cb-a150-3f306a4e26ea",
+              "name": "inputSheetName",
+              "type": "string",
+              "value": "Input"
+            },
+            {
+              "id": "7db07c9c-03b0-4f73-a476-b4ae56325935",
+              "name": "outputSpreadsheetId",
+              "type": "string",
+              "value": "YOUR_OUTPUT_SPREADSHEET_ID"
+            },
+            {
+              "id": "ce1df93d-a8dc-4a2e-8bc6-8f2f6b0c2c16",
+              "name": "outputSheetName",
+              "type": "string",
+              "value": "Output"
+            },
+            {
+              "id": "5a4f17f0-c62e-4b83-b35c-b27967987cc6",
+              "name": "prospectorUrl",
+              "type": "string",
+              "value": "http://127.0.0.1:3000/prospect"
+            },
+            {
+              "id": "7c4a212b-dfd9-4f1a-9525-38f376ee86b6",
+              "name": "webhookApiKey",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5ef4d7ad-579c-4ca3-ae4f-38b4014fd442",
+      "name": "Get Input Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -720,
+        200
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Config').first().json.inputSpreadsheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Workflow Config').first().json.inputSheetName }}"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a4caefe4-dbfd-4bfe-b8ec-31e9ce8a97ff",
+      "name": "Normalize Input Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const companyName = `${$json['Company Name'] || $json.companyName || $json.company || $json.name || ''}`.trim();\nconst websiteUrl = `${$json['Website URL'] || $json.websiteUrl || $json.website || $json.url || ''}`.trim();\nconst gmbInfo = `${$json['GMB Info'] || $json.gmbInfo || $json.gmb || $json.notes || ''}`.trim();\n\nif (!websiteUrl && !gmbInfo) {\n  return [];\n}\n\nreturn [{\n  json: {\n    companyName,\n    websiteUrl,\n    gmbInfo,\n  },\n}];"
+      }
+    },
+    {
+      "id": "6c2d3f06-6bca-4c05-aae8-b6e6db6f1f4a",
+      "name": "Call Email Prospector",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Workflow Config').first().json.prospectorUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "={{ $('Workflow Config').first().json.webhookApiKey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ companyName: $json.companyName, websiteUrl: $json.websiteUrl, gmbInfo: $json.gmbInfo }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "3773d205-0f30-4654-87cb-68d020cff95d",
+      "name": "Split Out Results",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        80,
+        200
+      ],
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      }
+    },
+    {
+      "id": "2c28467b-1cb8-49fe-98da-6931d7d94b45",
+      "name": "Build Output Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const result = $json.results || $json;\n\nreturn [{\n  json: {\n    'Company Name': result.companyName || '',\n    'Website URL': result.websiteUrl || '',\n    'GMB Info': result.gmbInfo || '',\n    'Email': result.email || '',\n    'First Name': result.firstName || '',\n    'Last Name': result.lastName || '',\n    'Role / Title': result.role || '',\n    'Department': result.department || '',\n    'Confidence Score': result.confidence === null || result.confidence === undefined || result.confidence === '' ? '' : `${result.confidence}`,\n    'Verification Status': result.verifyStatus || '',\n    'Email Type': result.emailType || '',\n    'Source': result.source || '',\n    'Found At': new Date().toISOString(),\n  },\n}];"
+      }
+    },
+    {
+      "id": "4b1bd4b5-cfbe-4fd1-8f3c-3c310279c9af",
+      "name": "Append Output Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Config').first().json.outputSpreadsheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Workflow Config').first().json.outputSheetName }}"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Website URL",
+              "displayName": "Website URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "GMB Info",
+              "displayName": "GMB Info",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "First Name",
+              "displayName": "First Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Last Name",
+              "displayName": "Last Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Role / Title",
+              "displayName": "Role / Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Department",
+              "displayName": "Department",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Confidence Score",
+              "displayName": "Confidence Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Verification Status",
+              "displayName": "Verification Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email Type",
+              "displayName": "Email Type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Found At",
+              "displayName": "Found At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "useAppend": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Workflow Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Config": {
+      "main": [
+        [
+          {
+            "node": "Get Input Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Input Rows": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input Row": {
+      "main": [
+        [
+          {
+            "node": "Call Email Prospector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Email Prospector": {
+      "main": [
+        [
+          {
+            "node": "Split Out Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Results": {
+      "main": [
+        [
+          {
+            "node": "Build Output Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Output Row": {
+      "main": [
+        [
+          {
+            "node": "Append Output Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "UTC"
+  },
+  "active": false
+}
