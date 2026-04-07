@@ -56,15 +56,15 @@ async function processCompany(rawRow, options = {}) {
         if (!exists) {
           emailCandidates.push({
             email: scrapedEmail.email,
-          firstName: '',
-          lastName: '',
-          role: scrapedEmail.role || '',
-          department: '',
-          confidence: 50,
-          emailType: scrapedEmail.emailType || 'scraped',
-          source: scrapedEmail.source,
-        });
-      }
+            firstName: '',
+            lastName: '',
+            role: scrapedEmail.role || '',
+            department: '',
+            confidence: typeof scrapedEmail.confidence === 'number' ? scrapedEmail.confidence : 50,
+            emailType: scrapedEmail.emailType || 'scraped',
+            source: scrapedEmail.source,
+          });
+        }
       }
     }
   }

@@ -4,6 +4,7 @@ const CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const DEFAULT_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
 const MAX_PAGES = 4;
 const MAX_CHARS_PER_PAGE = 5000;
+const EMAIL_PATTERN = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
 
 function getKey() {
   const key = `${process.env.GROQ_API_KEY || ''}`.trim();
@@ -48,7 +49,7 @@ function sanitizeContacts(rawContacts) {
 
   for (const rawContact of rawContacts) {
     const email = `${rawContact?.email || ''}`.trim().toLowerCase();
-    if (!email || seen.has(email)) continue;
+    if (!email || !EMAIL_PATTERN.test(email) || seen.has(email)) continue;
 
     seen.add(email);
     contacts.push({
@@ -93,6 +94,8 @@ async function extractContactsFromPages({ domain, pages }) {
               'Extract only grounded company contact emails from the provided webpage text.',
               'Return one JSON object with a "contacts" array.',
               'Each contact must include email, role, sourcePageUrl, and evidenceSnippet.',
+              'Only return true email addresses that contain "@" and a real domain suffix.',
+              'Never return phone numbers, names, URLs, or text fragments in the email field.',
               'Never invent or guess an address from the domain.',
               'Only include emails that are explicitly present or clearly deobfuscated from the text itself.',
               'If no grounded emails are present, return {"contacts":[]}.',

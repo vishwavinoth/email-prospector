@@ -35,6 +35,34 @@ const EXCLUDE_PATTERNS = [
   /sentry\.|@w3\.org|@schema\.org/i,
 ];
 
+function parseEnvInt(name, fallback) {
+  const parsed = parseInt(process.env[name] || `${fallback}`, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampConfidence(value, fallback) {
+  const parsed = Number.isFinite(value) ? value : fallback;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function getGroqMode() {
+  const mode = `${process.env.GROQ_MODE || 'fallback'}`.trim().toLowerCase();
+  return mode === 'assist' ? 'assist' : 'fallback';
+}
+
+function getScrapedConfidence(emailType, role) {
+  if (emailType === 'scraped_ai') {
+    const defaultConfidence = parseEnvInt('SCRAPED_AI_CONFIDENCE', 75);
+    const decisionMakerConfidence = parseEnvInt('SCRAPED_AI_DECISION_MAKER_CONFIDENCE', 85);
+    return clampConfidence(
+      isDecisionMakerRole(role) ? decisionMakerConfidence : defaultConfidence,
+      75
+    );
+  }
+
+  return clampConfidence(parseEnvInt('SCRAPED_CONFIDENCE', 50), 50);
+}
+
 function noopLogger() {
   return {
     log: () => {},
@@ -45,6 +73,17 @@ function noopLogger() {
 
 function isValidEmail(email) {
   return !EXCLUDE_PATTERNS.some(pattern => pattern.test(email));
+}
+
+function emailMatchesDomain(email, domain) {
+  if (!domain) return true;
+
+  const parts = `${email || ''}`.toLowerCase().split('@');
+  if (parts.length !== 2) return false;
+
+  const emailDomain = parts[1];
+  const normalizedDomain = `${domain}`.toLowerCase();
+  return emailDomain === normalizedDomain || emailDomain.endsWith(`.${normalizedDomain}`);
 }
 
 function normalizeUrl(url) {
@@ -89,6 +128,8 @@ function normalizeEmailishText(text) {
     .replace(/\[\s*dot\s*\]/gi, '.')
     .replace(/\(\s*dot\s*\)/gi, '.')
     .replace(/\bdot\b/gi, '.')
+    .replace(/\s*@\s*/g, '@')
+    .replace(/\s*\.\s*/g, '.')
     .replace(/\s+/g, ' ');
 }
 
@@ -101,7 +142,7 @@ function extractEmailsFromText(text, domain) {
   return [...new Set(found)]
     .map(email => email.trim())
     .filter(isValidEmail)
-    .filter(email => email.includes(domain) || !domain);
+    .filter(email => emailMatchesDomain(email, domain));
 }
 
 function extractEmailsFromHtml(html, domain) {
@@ -161,6 +202,7 @@ async function scrapeWebsiteEmails(websiteUrl, options = {}) {
   const allEmails = new Map();
   const pageSnapshots = [];
   const delay = parseInt(process.env.SCRAPE_DELAY_MS || '2000', 10);
+  const groqMode = getGroqMode();
 
   for (const pagePath of CONTACT_PATHS) {
     const pageUrl = `${normalized}${pagePath}`;
@@ -187,14 +229,21 @@ async function scrapeWebsiteEmails(websiteUrl, options = {}) {
         source: pageUrl,
         emailType: 'scraped',
         isDecisionMaker: isDecisionMakerRole(role),
+        confidence: getScrapedConfidence('scraped', role),
       });
     }
 
     await new Promise(resolve => setTimeout(resolve, delay));
   }
 
-  if (allEmails.size === 0 && groq.isEnabled() && pageSnapshots.length > 0) {
-    logger.log(`  Groq fallback analyzing ${pageSnapshots.length} page(s) for ${domain || normalized}`);
+  const shouldRunGroq = groq.isEnabled() && pageSnapshots.length > 0 && (
+    groqMode === 'assist' || allEmails.size === 0
+  );
+
+  if (shouldRunGroq) {
+    logger.log(
+      `  Groq ${groqMode === 'assist' ? 'assist' : 'fallback'} analyzing ${pageSnapshots.length} page(s) for ${domain || normalized}`
+    );
 
     const aiContacts = await groq.extractContactsFromPages({
       domain,
@@ -215,12 +264,13 @@ async function scrapeWebsiteEmails(websiteUrl, options = {}) {
         source: contact.sourcePageUrl || normalized,
         emailType: 'scraped_ai',
         isDecisionMaker: isDecisionMakerRole(role),
+        confidence: getScrapedConfidence('scraped_ai', role),
       });
       aiAdded += 1;
     }
 
     if (aiAdded > 0) {
-      logger.log(`  Groq fallback found ${aiAdded} grounded email(s)`);
+      logger.log(`  Groq added ${aiAdded} grounded email(s)`);
     }
   }
 

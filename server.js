@@ -17,6 +17,11 @@ function hasConfiguredValue(value) {
   return Boolean(normalized) && !normalized.endsWith('_here');
 }
 
+function getGroqMode() {
+  const mode = `${process.env.GROQ_MODE || 'fallback'}`.trim().toLowerCase();
+  return mode === 'assist' ? 'assist' : 'fallback';
+}
+
 function timestamp() {
   return new Date().toLocaleTimeString('en-IN');
 }
@@ -191,6 +196,7 @@ function createRequestHandler() {
         features: {
           hunter: hasConfiguredValue(process.env.HUNTER_API_KEY),
           groq: hasConfiguredValue(process.env.GROQ_API_KEY),
+          groqMode: hasConfiguredValue(process.env.GROQ_API_KEY) ? getGroqMode() : 'disabled',
           apiKeyProtection: hasConfiguredValue(process.env.WEBHOOK_API_KEY),
         },
         timestamp: new Date().toISOString(),

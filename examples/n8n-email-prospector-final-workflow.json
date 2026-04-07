@@ -29,31 +29,31 @@
               "id": "f5e36f0e-7db5-4b53-9f2b-b1f2a2eeb35e",
               "name": "inputSpreadsheetId",
               "type": "string",
-              "value": "YOUR_INPUT_SPREADSHEET_ID"
+              "value": "1J5RepS0TAzGbv4hG9LlTeWeKDPt4eet2paO1MS6JlM4"
             },
             {
               "id": "a6f4af35-0b9b-43cb-a150-3f306a4e26ea",
               "name": "inputSheetName",
               "type": "string",
-              "value": "Input"
+              "value": "Companies"
             },
             {
               "id": "7db07c9c-03b0-4f73-a476-b4ae56325935",
               "name": "outputSpreadsheetId",
               "type": "string",
-              "value": "YOUR_OUTPUT_SPREADSHEET_ID"
+              "value": "1J5RepS0TAzGbv4hG9LlTeWeKDPt4eet2paO1MS6JlM4"
             },
             {
               "id": "ce1df93d-a8dc-4a2e-8bc6-8f2f6b0c2c16",
               "name": "outputSheetName",
               "type": "string",
-              "value": "Output"
+              "value": "Results"
             },
             {
               "id": "5a4f17f0-c62e-4b83-b35c-b27967987cc6",
               "name": "prospectorUrl",
               "type": "string",
-              "value": "http://127.0.0.1:3000/prospect"
+              "value": "https://email-prospector-ruby.vercel.app/prospect"
             },
             {
               "id": "7c4a212b-dfd9-4f1a-9525-38f376ee86b6",
@@ -98,7 +98,7 @@
         200
       ],
       "parameters": {
-        "jsCode": "const companyName = `${$json['Company Name'] || $json.companyName || $json.company || $json.name || ''}`.trim();\nconst websiteUrl = `${$json['Website URL'] || $json.websiteUrl || $json.website || $json.url || ''}`.trim();\nconst gmbInfo = `${$json['GMB Info'] || $json.gmbInfo || $json.gmb || $json.notes || ''}`.trim();\n\nif (!websiteUrl && !gmbInfo) {\n  return [];\n}\n\nreturn [{\n  json: {\n    companyName,\n    websiteUrl,\n    gmbInfo,\n  },\n}];"
+        "jsCode": "const companyName = `${$json['Company Name'] || $json.companyName || $json.company || $json.name || ''}`.trim();\nconst websiteUrl = `${$json['Website URL'] || $json.websiteUrl || $json.website || $json.url || ''}`.trim();\nconst gmbInfo = `${$json['GMB Info'] || $json.gmbInfo || $json.gmb || $json.notes || ''}`.trim();\nconst processed = `${$json['Processed'] || ''}`.trim().toLowerCase();\nconst processedAt = `${$json['Processed At'] || ''}`.trim();\nconst status = `${$json['Status'] || ''}`.trim().toLowerCase();\nconst skipStatuses = ['processed', 'done', 'completed', 'success'];\n\nif (processedAt || ['true', 'yes', 'y', '1'].includes(processed) || skipStatuses.includes(status)) {\n  return [];\n}\n\nif (!websiteUrl && !gmbInfo) {\n  return [];\n}\n\nreturn [{\n  json: {\n    companyName,\n    websiteUrl,\n    gmbInfo,\n    inputRowNumber: $json.row_number || '',\n  },\n}];"
       }
     },
     {
@@ -152,7 +152,7 @@
         200
       ],
       "parameters": {
-        "jsCode": "const result = $json.results || $json;\n\nreturn [{\n  json: {\n    'Company Name': result.companyName || '',\n    'Website URL': result.websiteUrl || '',\n    'GMB Info': result.gmbInfo || '',\n    'Email': result.email || '',\n    'First Name': result.firstName || '',\n    'Last Name': result.lastName || '',\n    'Role / Title': result.role || '',\n    'Department': result.department || '',\n    'Confidence Score': result.confidence === null || result.confidence === undefined || result.confidence === '' ? '' : `${result.confidence}`,\n    'Verification Status': result.verifyStatus || '',\n    'Email Type': result.emailType || '',\n    'Source': result.source || '',\n    'Found At': new Date().toISOString(),\n  },\n}];"
+        "jsCode": "const result = $json.results || $json;\nconst companyName = result.companyName || '';\nconst websiteUrl = result.websiteUrl || '';\nconst gmbInfo = result.gmbInfo || '';\nconst email = result.email || '';\nconst resultKey = [companyName.toLowerCase(), websiteUrl.toLowerCase(), email.toLowerCase()].join('|');\n\nreturn [{\n  json: {\n    'Result Key': resultKey,\n    'Input Row Number': $json.inputRowNumber || '',\n    'Company Name': companyName,\n    'Website URL': websiteUrl,\n    'GMB Info': gmbInfo,\n    'Email': email,\n    'First Name': result.firstName || '',\n    'Last Name': result.lastName || '',\n    'Role / Title': result.role || '',\n    'Department': result.department || '',\n    'Confidence Score': result.confidence === null || result.confidence === undefined || result.confidence === '' ? '' : `${result.confidence}`,\n    'Verification Status': result.verifyStatus || '',\n    'Email Type': result.emailType || '',\n    'Source': result.source || '',\n    'Found At': new Date().toISOString(),\n  },\n}];"
       }
     },
     {
@@ -165,7 +165,7 @@
         200
       ],
       "parameters": {
-        "operation": "append",
+        "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
           "mode": "id",
@@ -179,8 +179,30 @@
         "columns": {
           "mappingMode": "autoMapInputData",
           "value": {},
-          "matchingColumns": [],
+          "matchingColumns": [
+            "Result Key"
+          ],
           "schema": [
+            {
+              "id": "Result Key",
+              "displayName": "Result Key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Input Row Number",
+              "displayName": "Input Row Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
             {
               "id": "Company Name",
               "displayName": "Company Name",
@@ -315,9 +337,7 @@
           "attemptToConvertTypes": false,
           "convertFieldsToString": false
         },
-        "options": {
-          "useAppend": true
-        }
+        "options": {}
       }
     }
   ],

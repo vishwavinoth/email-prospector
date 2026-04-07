@@ -4,7 +4,7 @@ Minimal Node.js API for `n8n` that finds public company emails from:
 
 - website scraping
 - optional Hunter domain search
-- optional Groq fallback when scraping finds nothing
+- optional Groq grounded extraction in `fallback` or `assist` mode
 - direct email mentions inside `GMB Info`
 
 This repo is now centered on one final `n8n` workflow:
@@ -15,15 +15,16 @@ Use that workflow if you want the Google Sheets -> Email Prospector -> Google Sh
 
 ## What The Final Workflow Does
 
-The final workflow reads rows from an input Google Sheet, normalizes each row, sends it to `POST /prospect`, splits the returned `results[]`, and appends one output row per result into your output Google Sheet.
+The final workflow reads rows from an input Google Sheet, normalizes each row, sends it to `POST /prospect`, splits the returned `results[]`, and upserts one output row per result into your output Google Sheet.
 
 Flow:
 
 1. Read rows from the input sheet
-2. Normalize `Company Name`, `Website URL`, and `GMB Info`
-3. Call the Email Prospector API
-4. Split `results[]`
-5. Append one row per result into the output sheet
+2. Skip rows already marked as processed
+3. Normalize `Company Name`, `Website URL`, and `GMB Info`
+4. Call the Email Prospector API
+5. Split `results[]`
+6. Upsert one row per result into the output sheet using a stable `Result Key`
 
 ## Local Setup
 
@@ -45,6 +46,7 @@ PORT=3000
 WEBHOOK_API_KEY=
 HUNTER_API_KEY=
 GROQ_API_KEY=
+GROQ_MODE=assist
 ```
 
 Notes:
@@ -52,6 +54,7 @@ Notes:
 - `WEBHOOK_API_KEY` is optional. If set, `n8n` must send it in `X-API-Key` or `Authorization: Bearer ...`.
 - `HUNTER_API_KEY` is optional. Without it, verification falls back to DNS / MX checks.
 - `GROQ_API_KEY` is optional. Without it, the scraper uses only deterministic extraction.
+- `GROQ_MODE=assist` makes Groq analyze crawled pages even when regex scraping already found emails.
 
 4. Start the API:
 
@@ -112,13 +115,13 @@ Run the workflow with `Test workflow`.
 Input sheet headers:
 
 ```text
-Company Name | Website URL | GMB Info
+Company Name | Website URL | GMB Info | Status | Processed | Processed At
 ```
 
 Output sheet headers:
 
 ```text
-Company Name | Website URL | GMB Info | Email | First Name | Last Name | Role / Title | Department | Confidence Score | Verification Status | Email Type | Source | Found At
+Result Key | Input Row Number | Company Name | Website URL | GMB Info | Email | First Name | Last Name | Role / Title | Department | Confidence Score | Verification Status | Email Type | Source | Found At
 ```
 
 Ready-to-use templates:
@@ -138,6 +141,12 @@ At least one of these must be present:
 
 - `websiteUrl`
 - `gmbInfo`
+
+Rows are skipped by the workflow if any of these input columns indicate they are already processed:
+
+- `Status` = `processed`, `done`, `completed`, or `success`
+- `Processed` = `true`, `yes`, `y`, or `1`
+- `Processed At` has any value
 
 ## API Endpoints
 
@@ -203,6 +212,44 @@ At least one of these must be present:
 | `emailType` | `personal`, `generic`, `scraped`, `scraped_ai`, `gmb`, or `unknown` |
 | `source` | Where the email came from |
 
+The output sheet also stores:
+
+- `Result Key`: unique key used by the workflow to upsert rows instead of duplicating them on reruns
+- `Input Row Number`: row number returned by the Google Sheets read step
+
+## Groq Without Hunter
+
+If you want a Groq-assisted setup without Hunter, use:
+
+```env
+HUNTER_API_KEY=
+GROQ_API_KEY=your_real_groq_api_key
+GROQ_MODEL=llama-3.1-8b-instant
+GROQ_MODE=assist
+SCRAPED_CONFIDENCE=50
+SCRAPED_AI_CONFIDENCE=75
+SCRAPED_AI_DECISION_MAKER_CONFIDENCE=85
+```
+
+Behavior:
+
+1. The app still crawls the website first
+2. Groq reads the crawled page text and returns only grounded emails
+3. Groq results are merged with scraped results
+4. `scraped_ai` results use their own confidence values
+
+Check `GET /health` after restart. You should see:
+
+```json
+{
+  "features": {
+    "hunter": false,
+    "groq": true,
+    "groqMode": "assist"
+  }
+}
+```
+
 ## Deploy On Render
 
 This repo includes:
@@ -232,6 +279,12 @@ The workflow skips rows where both of these are empty:
 
 - `Website URL`
 - `GMB Info`
+
+It also skips rows already marked as processed using:
+
+- `Status`
+- `Processed`
+- `Processed At`
 
 ### `n8n cannot reach localhost`
 
